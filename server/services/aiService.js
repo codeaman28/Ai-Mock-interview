@@ -5,6 +5,29 @@ dotenv.config();
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+export const transcribeAudioFile = async (base64Audio) => {
+  const prompt = "Please transcribe this audio exactly as spoken. Do not add any conversational text. Return only the raw transcript string. If it is silent or incomprehensible, return an empty string.";
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          inlineData: {
+            mimeType: "audio/webm",
+            data: base64Audio
+          }
+        },
+        prompt
+      ],
+      config: { temperature: 0.1 },
+    });
+    return response.text.trim();
+  } catch (error) {
+    console.error("Gemini Transcribe API error:", error);
+    throw new Error("Failed to transcribe audio via Gemini");
+  }
+};
+
 export const generateInterviewQuestions = async (topic) => {
   const prompt = `You are an expert technical interviewer hiring for a ${topic} position.
 Generate exactly 5 distinct, practical, and challenging interview questions for this topic.

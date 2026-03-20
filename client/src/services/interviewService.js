@@ -20,6 +20,26 @@ export const interviewService = {
   },
 
   /**
+   * Transcribes an audio blob using the backend
+   */
+  async transcribeAudio(audioBlob, token) {
+    const formData = new FormData();
+    formData.append("audio", audioBlob, "recording.webm");
+
+    const res = await fetch(`${API_URL}/transcribe`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to transcribe audio");
+    return data.transcript;
+  },
+
+  /**
    * Evaluates a single answer using the AI
    */
   async evaluateAnswer(topic, question, answer, token) {

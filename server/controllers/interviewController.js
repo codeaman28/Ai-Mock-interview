@@ -1,5 +1,5 @@
 import pool from "../config/db.js";
-import { generateInterviewQuestions, evaluateAnswer } from "../services/aiService.js";
+import { generateInterviewQuestions, evaluateAnswer, transcribeAudioFile } from "../services/aiService.js";
 
 // @desc    Generate questions for a specific topic
 // @route   POST /api/interview/generate
@@ -133,5 +133,26 @@ export const getInterviewResult = async (req, res) => {
   } catch (error) {
     console.error("Get result error:", error);
     res.status(500).json({ message: "Failed to fetch result" });
+  }
+};
+
+// @desc    Transcribe uploaded audio file
+// @route   POST /api/interview/transcribe
+// @access  Private
+export const transcribeAudio = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No audio file provided" });
+    }
+
+    const audioBytes = req.file.buffer.toString("base64");
+    
+    // Process audio using the same Gemini API key
+    const transcription = await transcribeAudioFile(audioBytes);
+
+    res.json({ transcript: transcription });
+  } catch (error) {
+    console.error("Transcribe error:", error);
+    res.status(500).json({ message: "Transcription failed" });
   }
 };
