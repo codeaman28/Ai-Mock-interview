@@ -2,20 +2,84 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { interviewService } from "../services/interviewService.js";
-import { 
-  BrainCircuit, 
-  Code2, 
-  Database, 
-  Cpu, 
-  Users, 
-  ChevronRight, 
-  Loader2, 
+import {
+  BrainCircuit,
+  Code2,
+  Database,
+  Cpu,
+  Users,
+  ChevronRight,
+  Loader2,
   AlertCircle,
   Play,
   CheckCircle2
 } from "lucide-react";
 
 export default function Interview() {
+  // Voice states
+  const [listening, setListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(true);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
+  // Check browser support
+  useEffect(() => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setSpeechSupported(false);
+    }
+  }, []);
+
+  // Toggle voice recording
+  const handleMicToggle = async () => {
+    if (!speechSupported) {
+      alert("Audio recording not supported in your browser.");
+      return;
+    }
+
+    if (listening) {
+      // Stop recording
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      }
+      setListening(false);
+    } else {
+      // Start recording
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // Use standard 'audio/webm' mimeType which is widely supported in modern browsers
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          try {
+            const transcript = await interviewService.transcribeAudio(audioBlob, token);
+            if (transcript) {
+              setCurrentAnswer((prev) => prev ? prev + " " + transcript : transcript);
+            }
+          } catch (err) {
+            setError("Transcription failed: " + err.message);
+          }
+        };
+
+        mediaRecorder.start();
+        setListening(true);
+        setError(""); // Clear previous errors
+      } catch (err) {
+        console.error("Mic access error:", err);
+        setError("Microphone access denied or error occurred.");
+      }
+    }
+  };
   const navigate = useNavigate();
   const location = useLocation();
   const { token } = useAuth();
@@ -28,7 +92,7 @@ export default function Interview() {
   const [topic, setTopic] = useState("");
   const [customTopic, setCustomTopic] = useState("");
   const [error, setError] = useState("");
-  
+
   // Interview Data
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -45,7 +109,7 @@ export default function Interview() {
       startTimeRef.current = Date.now();
       setStage("interview");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const predefinedTopics = [
@@ -61,10 +125,10 @@ export default function Interview() {
       setError("Please select or type a topic.");
       return;
     }
-    
+
     setError("");
     setStage("loading");
-    
+
     try {
       const gQuestions = await interviewService.generateQuestions(finalTopic, token);
       setQuestions(gQuestions);
@@ -84,7 +148,7 @@ export default function Interview() {
 
     setError("");
     setIsEvaluating(true);
-    
+
     const finalTopic = topic === "Custom" ? customTopic : topic;
     const currentQ = questions[currentIndex];
 
@@ -95,7 +159,7 @@ export default function Interview() {
         currentAnswer,
         token
       );
-      
+
       const updatedTranscript = [
         ...transcript,
         {
@@ -105,9 +169,9 @@ export default function Interview() {
           feedback: evaluation.feedback
         }
       ];
-      
+
       setTranscript(updatedTranscript);
-      
+
       if (currentIndex < questions.length - 1) {
         setCurrentAnswer("");
         setCurrentIndex(prev => prev + 1);
@@ -131,7 +195,7 @@ export default function Interview() {
         durationMinutes,
         transcript: finalTranscript
       }, token);
-      
+
       navigate(`/result?id=${sessionId}`);
     } catch (err) {
       setError("Interview finished, but failed to save. " + (err.message || ""));
@@ -170,11 +234,10 @@ export default function Interview() {
               <button
                 key={t.id}
                 onClick={() => setTopic(t.id)}
-                className={`flex items-center gap-4 p-4 rounded-xl border transition-all duration-300 text-left ${
-                  topic === t.id 
-                    ? "bg-indigo-600/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.2)]" 
-                    : "bg-slate-950/50 border-slate-800 hover:border-slate-600"
-                }`}
+                className={`flex items-center gap-4 p-4 rounded-xl border transition-all duration-300 text-left ${topic === t.id
+                  ? "bg-indigo-600/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                  : "bg-slate-950/50 border-slate-800 hover:border-slate-600"
+                  }`}
               >
                 <div className={`w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center ${t.color}`}>
                   <t.icon className="w-5 h-5" />
@@ -185,14 +248,13 @@ export default function Interview() {
                 </div>
               </button>
             ))}
-            
+
             <button
               onClick={() => setTopic("Custom")}
-              className={`flex items-center gap-4 p-4 rounded-xl border transition-all duration-300 text-left ${
-                topic === "Custom" 
-                  ? "bg-indigo-600/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.2)]" 
-                  : "bg-slate-950/50 border-slate-800 hover:border-slate-600"
-              }`}
+              className={`flex items-center gap-4 p-4 rounded-xl border transition-all duration-300 text-left ${topic === "Custom"
+                ? "bg-indigo-600/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                : "bg-slate-950/50 border-slate-800 hover:border-slate-600"
+                }`}
             >
               <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center text-yellow-400">
                 <BrainCircuit className="w-5 h-5" />
@@ -207,7 +269,7 @@ export default function Interview() {
           {topic === "Custom" && (
             <div className="mb-8 animate-in fade-in slide-in-from-top-4">
               <label className="block text-sm font-medium text-slate-300 mb-2">What do you want to practice?</label>
-              <input 
+              <input
                 type="text"
                 value={customTopic}
                 onChange={(e) => setCustomTopic(e.target.value)}
@@ -251,8 +313,8 @@ export default function Interview() {
           {stage === "loading" ? "Generating Context..." : "Processing Results..."}
         </h2>
         <p className="text-slate-400 max-w-sm text-center">
-          {stage === "loading" 
-            ? "Our AI is crafting a custom set of deep technical questions for your interview." 
+          {stage === "loading"
+            ? "Our AI is crafting a custom set of deep technical questions for your interview."
             : "The AI is finalizing your evaluation and calculating your overall score."}
         </p>
       </div>
@@ -279,14 +341,14 @@ export default function Interview() {
                 <div className="text-xs text-slate-400">{topic === "Custom" ? customTopic : (resumeState?.fromResume ? "📄 Resume-Based" : topic)}</div>
               </div>
             </div>
-            
+
             <div className="flex-1 max-w-xs mx-auto sm:mx-0 w-full ml-auto">
               <div className="flex justify-between text-xs text-slate-400 mb-2 font-medium">
                 <span>Question {currentIndex + 1} of {questions.length}</span>
                 <span>{Math.round(progress)}% Complete</span>
               </div>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 rounded-full transition-all duration-500 ease-out"
                   style={{ width: `${progress}%` }}
                 />
@@ -297,7 +359,7 @@ export default function Interview() {
 
         {/* Main Content */}
         <div className="flex-1 max-w-4xl w-full mx-auto px-4 py-8 flex flex-col">
-          
+
           {error && (
             <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-3 text-red-400 text-sm">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -323,6 +385,25 @@ export default function Interview() {
               <Code2 className="w-4 h-4 text-cyan-400" />
               Your Answer
             </h3>
+            <div className="flex items-center gap-4 mt-4">
+
+              <button
+                onClick={handleMicToggle}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${listening
+                    ? "bg-red-600 hover:bg-red-500 animate-pulse text-white shadow-[0_0_15px_rgba(239,68,68,0.5)]"
+                    : "bg-green-600 hover:bg-green-500 text-white"
+                  }`}
+              >
+                {listening ? "🛑 Stop Recording" : "🎤 Speak Answer"}
+              </button>
+
+              {!speechSupported && (
+                <p className="text-red-400 text-sm">
+                  Voice not supported (use Chrome)
+                </p>
+              )}
+
+            </div>
             <textarea
               value={currentAnswer}
               onChange={(e) => setCurrentAnswer(e.target.value)}
